@@ -1,0 +1,108 @@
+/* =========================
+   VARIABLES (ESCALA DE GRISES)
+========================= */
+:root {
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-600: #4b5563;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+}
+
+/* =========================
+   LAYOUT
+========================= */
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--gray-100);
+}
+
+.admin-content {
+  flex: 1;
+  padding: 24px;
+  background-color: var(--gray-100);
+}
+
+/* =========================
+   SIDEBAR
+========================= */
+.sidebar {
+  width: 220px;
+  background-color: var(--gray-50);
+  border-right: 1px solid var(--gray-200);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-title {
+  padding: 16px;
+  font-weight: 700;
+  color: var(--gray-900);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+/* Links */
+.sidebar-link {
+  padding: 12px 16px;
+  text-decoration: none;
+  color: var(--gray-800);
+  font-weight: 500;
+  transition: background 0.15s ease;
+}
+
+.sidebar-link:hover {
+  background-color: var(--gray-200);
+}
+
+.sidebar-link.active {
+  background-color: var(--gray-300);
+  font-weight: 600;
+}
+
+/* Logout */
+.sidebar-logout {
+  margin: 16px;
+  margin-top: auto;
+  padding: 10px;
+  background-color: var(--gray-800);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.sidebar-logout:hover {
+  background-color: var(--gray-900);
+}
+
+/* =========================
+   CONTENIDO (PÁGINAS)
+========================= */
+.page-container {
+  background-color: #fff;
+  border-radius: 10px;
+  padding: 24px;
+  border: 1px solid var(--gray-200);
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--gray-900);
+}
+
+/* Tables Bootstrap override */
+.table thead th {
+  background-color: var(--gray-100);
+  color: var(--gray-800);
+}
