@@ -46,7 +46,7 @@ export const RegisterPage = () => {
         nombre: form.nombre,
         email: form.email,
         password: form.password,
-        rolId: form.rolId,
+        rol_id: form.rolId,
         estado: 1,
       });
 

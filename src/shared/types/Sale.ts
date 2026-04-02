@@ -7,13 +7,18 @@ export interface CartItem {
 }
 
 export interface CreateSale {
+  usuario_id: number;               // <--- agregar
+  empresa_id: number;               // <--- agregar
+  cliente_id: number;
+  caja_id: number;
   metodo_pago: "EFECTIVO" | "TARJETA" | "TRANSFERENCIA";
-  cliente_id?: number; // listo para después
   detalles: {
     producto_id: number;
     cantidad: number;
+    precio_unitario: number;
   }[];
 }
+
 
 
 export interface Sale {
@@ -23,15 +28,17 @@ total: number;
 metodo_pago: string;
 estado: string;
 creado_en: string;
+empresa_id:number;
+caja_id: number;
 }
 
 
 export interface SaleDetail {
-id: number;
-venta_id: number;
-producto_id: number;
-cantidad: number;
-precio_unitario: number;
-subtotal: number;
-nombre: string;
+  id: number;
+  producto_id: number;
+  descripcion: string;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal?: number;
 }
+

@@ -1,17 +1,23 @@
-import api from '../services/api';
-import type { CreateSale, Sale, SaleDetail } from '../../shared/types/Sale';
+// src/modules/ventas/ventas.service.ts
+import api from "../../shared/api/axios";
+import type { CreateSale, Sale } from "../../shared/types/Sale";
+
+// Listar todas las ventas
+export const listarVentas = () => api.get<Sale[]>("/ventas");
+
+// Obtener detalles de una venta
+export const getVentaDetalle = (id: number) => api.get<Sale>(`/ventas/${id}`);
+
+// Crear nueva venta
+export const crearVenta = (data: CreateSale) => api.post("/ventas", data);
+
+// Anular venta
+export const anularVenta = (id: number) => api.patch(`/ventas/${id}/anular`);
+
+// Facturar venta
+export const facturarVenta = (id: number) => api.post(`/ventas/${id}/facturar`);
 
 
-export const listarVentas = () => api.get<Sale[]>('/ventas');
-
-
-export const getVentaDetalle = (id: number) =>
-api.get<SaleDetail[]>(`/ventas/${id}/detalle`);
-
-
-export const crearVenta = (data: CreateSale) =>
-api.post('/ventas', data);
-
-
-export const anularVenta = (id: number) =>
-api.patch(`/ventas/${id}/anular`);
+// src/modules/ventas/ventas.service.ts (frontend)
+export const ventasPorDia = (empresa_id: number) =>
+  api.get(`/ventas/dashboard/por-dia/${empresa_id}`);

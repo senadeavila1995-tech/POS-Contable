@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { listarVentas } from "../ventas/ventas.service";
 import { getCompras } from "../compras/compras.service";
-import { getCajaActual, abrirCaja } from "../caja/caja.service"; // <-- importamos
+import {
+  getCajaActual,
+  abrirCaja,
+  cerrarCaja,
+} from "./dashboardService";
 
 import {
   BarChart,
@@ -25,20 +29,40 @@ interface FlujoDiario {
   balance: number;
 }
 
+interface Caja {
+  id: number;
+  monto_inicial: number;
+  estado: "ABIERTA" | "CERRADA";
+}
+
 const Dashboard: React.FC = () => {
   const [flujo, setFlujo] = useState<FlujoDiario[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [cajaAbierta, setCajaAbierta] = useState(false);
-  const [abriendo, setAbriendo] = useState(false);
+  // ===== CAJA =====
+  const [caja, setCaja] = useState<Caja | null>(null);
+  const [montoInicial, setMontoInicial] = useState("");
+  const [montoFinal, setMontoFinal] = useState("");
+  const [observaciones, setObservaciones] = useState("");
 
+  // ======================
+  // Cargar caja actual
+  // ======================
+  const cargarCaja = async () => {
+    try {
+      const resp = await getCajaActual();
+      setCaja(resp.data ?? null);
+    } catch {
+      setCaja(null);
+    }
+  };
+
+  // ======================
+  // Dashboard contable
+  // ======================
   useEffect(() => {
     const cargarDashboard = async () => {
       try {
-        // ⚡ Revisar si hay caja abierta
-        const cajaResp = await getCajaActual();
-        setCajaAbierta(Boolean(cajaResp.data?.id));
-
         const [ventasResp, comprasResp] = await Promise.all([
           listarVentas(),
           getCompras(),
@@ -69,7 +93,8 @@ const Dashboard: React.FC = () => {
           .map((f) => ({ ...f, balance: f.ingresos - f.egresos }))
           .sort(
             (a, b) =>
-              new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
+              new Date(a.fecha).getTime() -
+              new Date(b.fecha).getTime()
           );
 
         setFlujo(resultado);
@@ -81,9 +106,12 @@ const Dashboard: React.FC = () => {
     };
 
     cargarDashboard();
+    cargarCaja();
   }, []);
 
-  // ====================== KPIs ======================
+  // ======================
+  // KPIs
+  // ======================
   const resumen = useMemo(() => {
     return flujo.reduce(
       (acc, f) => {
@@ -96,21 +124,36 @@ const Dashboard: React.FC = () => {
     );
   }, [flujo]);
 
-  // ====================== ABRIR CAJA ======================
+  // ======================
+  // Acciones Caja
+  // ======================
   const handleAbrirCaja = async () => {
-    try {
-      setAbriendo(true);
-      await abrirCaja({ monto_inicial: 0 }); // ⚡ no asignamos a "resp"
-      setCajaAbierta(true);
-      alert("Caja abierta correctamente ✅");
-    } catch (error: any) {
-      console.error(error);
-      alert(error.response?.data?.message || error.message);
-    } finally {
-      setAbriendo(false);
+    if (!montoInicial) {
+      alert("Ingrese monto inicial");
+      return;
     }
+
+    await abrirCaja({
+      monto_inicial: Number(montoInicial),
+    });
+
+    setMontoInicial("");
+    cargarCaja();
   };
 
+  const handleCerrarCaja = async () => {
+    if (!caja) return;
+
+    await cerrarCaja({
+      caja_id: caja.id,
+      monto_final_real: Number(montoFinal),
+      observaciones,
+    });
+
+    setMontoFinal("");
+    setObservaciones("");
+    cargarCaja();
+  };
 
   if (loading) {
     return (
@@ -124,18 +167,60 @@ const Dashboard: React.FC = () => {
     <div className="container mt-4">
       <h2 className="mb-4">Dashboard Contable</h2>
 
-      {/* ================= BOTÓN ABRIR CAJA ================= */}
-      {!cajaAbierta && (
-        <div className="mb-4">
-          <button
-            className="btn btn-primary"
-            onClick={handleAbrirCaja}
-            disabled={abriendo}
-          >
-            {abriendo ? "Abriendo..." : "Abrir Caja"}
-          </button>
+      {/* ================= CAJA ================= */}
+      <div className="card mb-4">
+        <div className="card-body">
+          <h5>Caja del Día</h5>
+
+          {!caja && (
+            <>
+              <input
+                className="form-control mb-2"
+                placeholder="Monto inicial"
+                value={montoInicial}
+                onChange={(e) => setMontoInicial(e.target.value)}
+              />
+              <button
+                className="btn btn-success"
+                onClick={handleAbrirCaja}
+              >
+                Abrir Caja
+              </button>
+            </>
+          )}
+
+          {caja && caja.estado === "ABIERTA" && (
+            <>
+              <p><strong>Monto inicial:</strong> ${caja.monto_inicial}</p>
+              <p>
+                <strong>Balance sistema:</strong>{" "}
+                ${resumen.balance.toFixed(2)}
+              </p>
+
+              <input
+                className="form-control mb-2"
+                placeholder="Monto final real"
+                value={montoFinal}
+                onChange={(e) => setMontoFinal(e.target.value)}
+              />
+
+              <textarea
+                className="form-control mb-2"
+                placeholder="Observaciones"
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+              />
+
+              <button
+                className="btn btn-danger"
+                onClick={handleCerrarCaja}
+              >
+                Cerrar Caja
+              </button>
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       {/* ================= KPIs ================= */}
       <div className="row mb-4">
@@ -167,7 +252,7 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* ================= BAR CHART ================= */}
+      {/* ================= GRAFICOS ================= */}
       <div className="card mb-4">
         <div className="card-body">
           <h5>Ingresos vs Egresos</h5>
@@ -184,7 +269,6 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* ================= LINE CHART ================= */}
       <div className="card mb-4">
         <div className="card-body">
           <h5>Evolución del Balance</h5>
@@ -199,35 +283,6 @@ const Dashboard: React.FC = () => {
           </ResponsiveContainer>
         </div>
       </div>
-
-      {/* ================= TABLE ================= */}
-      <table className="table table-bordered table-striped">
-        <thead>
-          <tr>
-            <th>Fecha</th>
-            <th>Ingresos</th>
-            <th>Egresos</th>
-            <th>Balance</th>
-          </tr>
-        </thead>
-        <tbody>
-          {flujo.map((f) => (
-            <tr key={f.fecha}>
-              <td>{f.fecha}</td>
-              <td>${f.ingresos.toFixed(2)}</td>
-              <td>${f.egresos.toFixed(2)}</td>
-              <td
-                style={{
-                  color: f.balance >= 0 ? "green" : "red",
-                  fontWeight: "bold",
-                }}
-              >
-                ${f.balance.toFixed(2)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 };

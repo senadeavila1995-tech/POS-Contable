@@ -32,3 +32,29 @@ export const getComprasPorDia = (
 // Listar compras (para totales)
 export const getCompras = () =>
   api.get(`/compras`);
+
+
+/* ========= CAJA ========= */
+
+// Caja actual
+export const getCajaActual = () =>
+  api.get<{
+    id: number;
+    fecha: string;
+    monto_inicial: number;
+    estado: "ABIERTA" | "CERRADA";
+  }>(`/caja/actual`);
+
+// Abrir caja
+export const abrirCaja = (data: {
+  monto_inicial: number;
+}) =>
+  api.post("/caja/abrir", data);
+
+// Cerrar caja
+export const cerrarCaja = (data: {
+  caja_id: number;
+  monto_final_real: number;
+  observaciones?: string;
+}) =>
+  api.post("/caja/cerrar", data);

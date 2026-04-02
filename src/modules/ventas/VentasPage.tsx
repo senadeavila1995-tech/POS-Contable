@@ -1,21 +1,38 @@
 import { useEffect, useState } from "react";
-import {
-  listarVentas,
-  getVentaDetalle,
-  crearVenta
-} from "./ventas.service";
+import axios from "axios";
+import { jwtDecode } from "jwt-decode";
+
+import { listarVentas, getVentaDetalle, crearVenta, facturarVenta } from "./ventas.service";
+import { getProductById } from "../productos/Product.service";
+import { getClienteByDocumento } from "../Clientes/cliente.service";
 
 import type {
   Sale,
   SaleDetail,
-  CartItem,
   CreateSale
 } from "../../shared/types/Sale";
-import axios from "axios";
-import { getProductById } from "../productos/Product.service";
-import { getClienteByDocumento } from "../Clientes/cliente.service";
 import type { Product } from "../../shared/types/Product";
 import type { Cliente } from "../../shared/types/Cliente";
+
+
+// --- Tipo para la respuesta de crearVenta ---
+interface CrearVentaResponse {
+  message: string;
+  venta_id: number;
+  total: number;
+  factura?: any;
+};
+interface CartItem {
+  producto_id: number;
+  nombre: string;
+  precio_unitario: number;
+  cantidad: number;
+  subtotal: number;
+}
+
+
+
+
 
 const VentasPage = () => {
   /* ===============================
@@ -26,7 +43,6 @@ const VentasPage = () => {
   const [ventaSeleccionada, setVentaSeleccionada] = useState<number | null>(null);
 
   const [carrito, setCarrito] = useState<CartItem[]>([]);
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,12 +53,79 @@ const VentasPage = () => {
   const [mostrarFormularioCliente, setMostrarFormularioCliente] = useState(false);
 
   /* ===============================
-     CARGAR VENTAS
+     USUARIO Y EMPRESA DESDE JWT
   =============================== */
+  const [usuarioId, setUsuarioId] = useState<number | null>(null);
+  const [empresaId, setEmpresaId] = useState<number | null>(null);
+
   useEffect(() => {
-    cargarVentas();
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      setError("No hay sesión activa");
+      return;
+    }
+
+    try {
+      const decoded = jwtDecode<any>(token); // usamos any para evitar warning
+      if (!decoded.id || !decoded.empresa_id) {
+        setError("Token inválido: falta usuario o empresa");
+        return;
+      }
+
+      setUsuarioId(decoded.id);
+      setEmpresaId(decoded.empresa_id);
+
+      cargarVentas(); // cargar ventas después de obtener datos correctos
+    } catch (error) {
+      console.error("Error decodificando JWT:", error);
+      setError("Sesión inválida, vuelva a iniciar sesión");
+    }
   }, []);
 
+
+  const aumentarCantidad = (productoId: number) => {
+    setCarrito(prev =>
+      prev.map(item => {
+        const precio = Number(item.precio_unitario);
+        const cantidad = Number(item.cantidad) + 1;
+
+        return item.producto_id === productoId
+          ? {
+            ...item,
+            cantidad,
+            precio_unitario: precio,
+            subtotal: cantidad * precio
+          }
+          : item;
+      })
+    );
+  };
+
+  const disminuirCantidad = (productoId: number) => {
+    setCarrito(prev =>
+      prev
+        .map(item => {
+          const precio = Number(item.precio_unitario);
+          const cantidad = Number(item.cantidad) - 1;
+
+          return item.producto_id === productoId
+            ? {
+              ...item,
+              cantidad,
+              precio_unitario: precio,
+              subtotal: cantidad * precio
+            }
+            : item;
+        })
+        .filter(item => item.cantidad > 0)
+    );
+  };
+
+
+  /* ===============================
+     CARGAR VENTAS
+  =============================== */
   const cargarVentas = async () => {
     try {
       const res = await listarVentas();
@@ -97,22 +180,28 @@ const VentasPage = () => {
      CARRITO
   =============================== */
   const agregarAlCarrito = (producto: Product) => {
-    setCarrito((prev) => {
+    setCarrito(prev => {
       const existente = prev.find(
-        (item) => item.producto_id === producto.id
+        item => item.producto_id === producto.id
       );
 
       if (existente) {
-        return prev.map((item) =>
+        const nuevaCantidad = existente.cantidad + 1;
+        const precio = Number(existente.precio_unitario);
+
+        return prev.map(item =>
           item.producto_id === producto.id
             ? {
-                ...item,
-                cantidad: item.cantidad + 1,
-                subtotal: (item.cantidad + 1) * item.precio_unitario
-              }
+              ...item,
+              cantidad: nuevaCantidad,
+              precio_unitario: precio,
+              subtotal: nuevaCantidad * precio
+            }
             : item
         );
       }
+
+      const precio = Number(producto.precio);
 
       return [
         ...prev,
@@ -120,89 +209,125 @@ const VentasPage = () => {
           producto_id: producto.id,
           nombre: producto.nombre,
           cantidad: 1,
-          precio_unitario: producto.precio,
-          subtotal: producto.precio
+          precio_unitario: precio,
+          subtotal: precio
         }
       ];
     });
   };
 
-  const total = carrito.reduce((acc, item) => acc + item.subtotal, 0);
+
+  const total = carrito.reduce(
+    (acc, item) => acc + Number(item.subtotal),
+    0
+  );
+
 
   /* ===============================
      CONFIRMAR VENTA
   =============================== */
   const confirmarVenta = async () => {
+    if (usuarioId === null || empresaId === null) {
+      setError("Usuario o empresa no cargados aún. Intente nuevamente.");
+      return;
+    }
+
+    if (!clienteEncontrado?.id) {
+      setError("Debe seleccionar o registrar un cliente");
+      return;
+    }
+
     if (carrito.length === 0) {
       setError("El carrito está vacío");
       return;
     }
 
-    if (!clienteEncontrado) {
-      setError("Debe seleccionar o registrar un cliente");
-      return;
-    }
-
-    const payload: CreateSale = {
-      metodo_pago: "EFECTIVO",
+    // Payload EXACTO que espera el backend
+    const payload: CreateSale & { usuario_id: number; empresa_id: number } = {
+      usuario_id: usuarioId,
+      empresa_id: empresaId,
       cliente_id: clienteEncontrado.id,
+      metodo_pago: "EFECTIVO",
       detalles: carrito.map((item) => ({
         producto_id: item.producto_id,
-        cantidad: item.cantidad,
-        precio_unitario: item.precio_unitario
+        cantidad: Number(item.cantidad),
+        precio_unitario: Number(item.precio_unitario)
       }))
     };
 
+
     try {
       setLoading(true);
-      const res = await crearVenta(payload);
-      console.log(res.data)
+
+      const res = await crearVenta(payload) as { data: CrearVentaResponse };
       const ventaId = res.data.venta_id;
 
+      // Abrir PDF de factura
+      // 1) Facturar
+      await facturarVenta(ventaId);
+
+
+
+      // 2) Abrir PDF
       window.open(
-        `http://localhost:3000/api/facturas/${ventaId}/pdf`,
+        `http://localhost:3000/api/facturacion/${ventaId}/pdf`,
         "_blank"
       );
 
+
+
+      // Limpiar carrito y cliente
       setCarrito([]);
       setClienteEncontrado(null);
       await cargarVentas();
       alert("Venta registrada correctamente");
-    } catch {
-      setError("Error al registrar la venta");
+
+    } catch (err: any) {
+      console.error("Error creando venta:", err);
+      if (err.response?.data?.message) setError(err.response.data.message);
+      else setError("Error al registrar la venta");
     } finally {
       setLoading(false);
     }
   };
 
+
+
   /* ===============================
-     DETALLE
+     VER DETALLE DE VENTA
   =============================== */
   const verDetalle = async (ventaId: number) => {
     try {
       const res = await getVentaDetalle(ventaId);
-      setDetalleVenta(res.data);
+
+      const detalle = Array.isArray(res.data.detalles)
+        ? res.data.detalles
+        : [];
+
+      setDetalleVenta(detalle);
       setVentaSeleccionada(ventaId);
-    } catch {
+
+      console.log("RESPUESTA DETALLE VENTA:", res.data);
+    } catch (error) {
+      console.error(error);
+      setDetalleVenta([]);
       setError("Error al cargar detalle de venta");
     }
   };
+
+
 
   /* ===============================
      RENDER
   =============================== */
   return (
     <div className="container py-4">
-      {/* Header */}
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2 className="fw-bold mb-0">Módulo de Ventas</h2>
       </div>
 
       {error && <div className="alert alert-danger">{error}</div>}
 
-      {/* ===============================
-          NUEVA VENTA
-      =============================== */}
       <div className="row g-4 mb-4">
         {/* Producto */}
         <div className="col-md-4">
@@ -242,7 +367,7 @@ const VentasPage = () => {
               )}
               {clienteEncontrado && (
                 <div className="text-success small mb-2">
-                  Cliente encontrado. 
+                  Cliente encontrado.
                 </div>
               )}
               <button className="btn btn-outline-dark w-100" onClick={buscarCliente}>
@@ -270,11 +395,31 @@ const VentasPage = () => {
                   {carrito.map((item) => (
                     <tr key={item.producto_id}>
                       <td>{item.nombre}</td>
-                      <td>{item.cantidad}</td>
-                      <td>${item.subtotal}</td>
+
+                      <td className="text-center">
+                        <button
+                          className="btn btn-sm btn-outline-secondary"
+                          onClick={() => disminuirCantidad(item.producto_id)}
+                        >
+                          −
+                        </button>
+
+                        <span className="mx-2 fw-bold">{item.cantidad}</span>
+
+                        <button
+                          className="btn btn-sm btn-outline-primary"
+                          onClick={() => aumentarCantidad(item.producto_id)}
+                        >
+                          +
+                        </button>
+                      </td>
+
+                      <td>${Number(item.subtotal).toFixed(2)}</td>
+
                     </tr>
                   ))}
                 </tbody>
+
               </table>
 
               <h6 className="fw-bold">Total: ${total}</h6>
@@ -291,9 +436,7 @@ const VentasPage = () => {
         </div>
       </div>
 
-      {/* ===============================
-          LISTA DE VENTAS
-      =============================== */}
+      {/* LISTA DE VENTAS */}
       <div className="table-responsive">
         <table className="table table-bordered table-hover align-middle">
           <thead className="table-light">
@@ -328,15 +471,11 @@ const VentasPage = () => {
         </table>
       </div>
 
-      {/* ===============================
-          DETALLE
-      =============================== */}
+      {/* DETALLE DE VENTA */}
       {ventaSeleccionada && (
         <>
           <hr />
-          <h5 className="fw-bold">
-            Detalle de venta #{ventaSeleccionada}
-          </h5>
+          <h5 className="fw-bold">Detalle de venta #{ventaSeleccionada}</h5>
 
           <table className="table table-bordered">
             <thead className="table-light">
@@ -348,15 +487,25 @@ const VentasPage = () => {
               </tr>
             </thead>
             <tbody>
-              {detalleVenta.map((d) => (
-                <tr key={d.id}>
-                  <td>{d.nombre}</td>
-                  <td>{d.cantidad}</td>
-                  <td>${d.precio_unitario}</td>
-                  <td>${d.subtotal}</td>
+              {Array.isArray(detalleVenta) && detalleVenta.length > 0 ? (
+                detalleVenta.map((d) => (
+                  <tr key={d.id}>
+                    <td>{d.descripcion}</td>
+                    <td>{d.cantidad}</td>
+                    <td>${Number(d.precio_unitario).toFixed(2)}</td>
+                    <td>${Number(d.subtotal).toFixed(2)}</td>
+
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="text-center text-muted">
+                    No hay detalles para esta venta
+                  </td>
                 </tr>
-              ))}
+              )}
             </tbody>
+
           </table>
         </>
       )}

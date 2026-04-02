@@ -1,7 +1,10 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import AdminLayout from "./layout/AdminLayout";
-import {Dashboard} from "./modules/dashboard/Dashboard"
+import Dashboard from "./modules/dashboard/Dashboard"
 import { CategoriesPage } from "./modules/categorias/CategoriesPage";
+import {ComprasPage}  from "./modules/compras/ComprasPage";
+import {ProveedoresPage}  from "./modules/proveedores/ProveedoresPage";
+import CajaPage from "./modules/caja/CajaPage";
 
 import { ProductsPage } from "./modules/productos/ProductsPage";
 import VentasPage  from "./modules/ventas/VentasPage";
@@ -34,7 +37,11 @@ export default function RoutesApp() {
           </PrivateRoute>
         }
       >
+        <Route path="caja" element={<CajaPage />} />
+
         <Route path="dashboard" element={<Dashboard />} />
+         <Route path="proveedores" element={<ProveedoresPage />} />
+        <Route path="compras" element={<ComprasPage />} />
 
         <Route path="categorias" element={<CategoriesPage />} />
         <Route path="clientes" element={<ClientesPage />} />
